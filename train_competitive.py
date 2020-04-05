@@ -40,6 +40,18 @@ parser.add_argument(
          "Default: /tmp/ierg6130_hw4/ppo/"
 )
 parser.add_argument(
+    "--load-dir",
+    default="",
+    type=str,
+    help="The path of directory where the trained model resides"
+)
+parser.add_argument(
+    "--load-suffix",
+    default="",
+    type=str,
+    help="The suffix of the the trained model file"
+)
+parser.add_argument(
     "--num-envs",
     default=15,
     type=int,
@@ -86,7 +98,7 @@ def train(args):
         raise ValueError("args.algo must in [PPO, A2C]")
     config.num_envs = args.num_envs
     assert args.env_id in ["CompetitivePong-v0", "CartPole-v0",
-                           "CompetitivePongTournament-v0"]
+                           "CompetitivePongTournament-v0", "CompetitivePongDouble-v0"]
 
     # Seed the environments and setup torch
     seed = args.seed
@@ -129,6 +141,11 @@ def train(args):
         trainer = PPOTrainer(envs, config, frame_stack, _test=test)
     else:
         trainer = A2CTrainer(envs, config, frame_stack, _test=test)
+
+    # print('args.load_dir', args.load_dir)
+    # print('args.load_suffix', args.load_suffix)
+    if args.load_dir and args.load_suffix:
+        trainer.load_w(args.load_dir, args.load_suffix)
 
     # Create a placeholder tensor to help stack frames in 2nd dimension
     # That is turn the observation from shape [num_envs, 1, 84, 84] to

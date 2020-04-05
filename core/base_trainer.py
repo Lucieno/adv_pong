@@ -119,3 +119,6 @@ class BaseTrainer:
             )
             self.model.load_state_dict(state_dict["model"])
             self.optimizer.load_state_dict(state_dict["optimizer"])
+            print("Loaded checkpoint to the trainer:", save_path)
+        else:
+            print("Failed to load:", save_path, os.path.abspath(save_path), os.path.isfile(save_path))
