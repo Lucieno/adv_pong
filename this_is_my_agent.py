@@ -38,8 +38,8 @@ def student_compute_action_function(num_envs=1):
     Run this file directly to make sure everything is fine.
     """
     # [TODO] rewrite this function
-    my_agent_log_dir = "data/YOUR-LOG-DIR/PPO"
-    my_agent_suffix = "iter600"
+    my_agent_log_dir = "data/competitive/PPO"
+    my_agent_suffix = "iter1400"
 
     checkpoint_path = osp.join(my_agent_log_dir,
                                "checkpoint-{}.pkl".format(my_agent_suffix))
