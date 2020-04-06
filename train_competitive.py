@@ -52,6 +52,12 @@ parser.add_argument(
     help="The suffix of the the trained model file"
 )
 parser.add_argument(
+    "--agent",
+    default="",
+    type=str,
+    help="The name of the agent with whom you want to compete"
+)
+parser.add_argument(
     "--num-envs",
     default=15,
     type=int,
@@ -170,6 +176,10 @@ def train(args):
     obs = envs.reset()
     frame_stack_tensor.update(obs)
     trainer.rollouts.observations[0].copy_(frame_stack_tensor.get())
+
+    if args.agent:
+        envs.reset_opponent(agent_name=args.agent)
+
     while True:  # Break when total_steps exceeds maximum value
         # ===== Sample Data =====
         with sample_timer:
@@ -219,7 +229,7 @@ def train(args):
             trainer.rollouts.after_update()
 
         # ===== Reset opponent if in tournament mode =====
-        if tournament and iteration % config.num_steps == 0:
+        if tournament and not args.agent and iteration % config.num_steps == 0:
             # Randomly choose one agent in each iteration
             envs.reset_opponent()
 
