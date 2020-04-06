@@ -20,28 +20,42 @@ class ActorCritic(nn.Module):
                                           lambda x: nn.init.constant_(x, 0),
                                           nn.init.calculate_gain('relu'))
         # The network structure is designed for 42X42 observation.
-        self.conv1 = init_(
-            nn.Conv2d(input_shape[0], 16, kernel_size=4, stride=2))
-        self.conv2 = init_(
-            nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=2))
-        self.conv3 = init_(nn.Conv2d(32, 256, kernel_size=11, stride=1))
+        self.conv1 = init_(nn.Conv2d(input_shape[0], 128, kernel_size=3, stride=1, padding=1))
+        self.maxpool1 = nn.MaxPool2d(2, stride=2)
 
-        init_ = lambda m: self.layer_init(
-            m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
-        self.critic_linear = init_(nn.Linear(self.feature_size(input_shape), 1))
+        self.conv2 = init_(nn.Conv2d(64, 128, kernel_size=4, stride=1, padding=1))
+        self.maxpool2 = nn.MaxPool2d(3, stride=3)
 
-        init_ = lambda m: self.layer_init(
-            m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01
-        )
-        self.actor_linear = init_(
-            nn.Linear(self.feature_size(input_shape), num_actions))
+        self.conv3_1 = init_(nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1))
+        self.conv3_2 = init_(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1))
+        self.maxpool3 = nn.MaxPool2d(3, stride=3, padding=1)
+
+        self.conv4_1 = init_(nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1))
+        self.conv4_1 = init_(nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1))
+        self.maxpool4 = nn.MaxPool2d(3, stride=3)
+
+        flatten_size = 512
+        # self.fc1 = nn.Linear(flatten_size, 512)
+
+        init_ = lambda m: self.layer_init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
+        self.critic_linear = init_(nn.Linear(flatten_size, 1))
+
+        init_ = lambda m: self.layer_init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
+        self.actor_linear = init_(nn.Linear(flatten_size, num_actions))
 
         self.train()
 
     def forward(self, inputs):
         x = F.relu(self.conv1(inputs / 255.0))
+        x = self.maxpool1(x)
         x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+        x = self.maxpool2(x)
+        x = F.relu(self.conv3_1(x))
+        x = F.relu(self.conv3_2(x))
+        x = self.maxpool3(x)
+        x = F.relu(self.conv4_1(x))
+        x = F.relu(self.conv4_2(x))
+        x = self.maxpool4(x)
         x = x.view(x.size(0), -1)
         value = self.critic_linear(x)
         logits = self.actor_linear(x)
