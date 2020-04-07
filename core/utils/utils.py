@@ -213,21 +213,19 @@ def mirror_evaluate(trainer, mirror, eval_envs, frame_stack, num_episodes=10, se
     frame_stack_tensor = FrameStackTensor( eval_envs.num_envs, eval_envs.observation_space[0].shape, frame_stack, trainer.device)
     mirror_frame_stack_tensor = FrameStackTensor( eval_envs.num_envs, eval_envs.observation_space[0].shape, frame_stack, trainer.device)
 
-    def get_action(frame_stack_tensor, mirror_frame_stack_tensor):
+    def get_action(frame_stack_tensor):
         obs = frame_stack_tensor.get()
         mirror_obs = frame_stack_tensor.get()
         if isinstance(obs, np.ndarray):
             obs = torch.from_numpy(obs).to(trainer.device)
         with torch.no_grad():
             act = trainer.compute_action(obs, deterministic=True)[1]
-            mirror_act = mirror.compute_action(mirror_obs, deterministic=True)[1]
         act = act.view(-1).cpu().numpy()
-        mirror_act = mirror_act.view(-1).cpu().numpy()
-        return list(zip(act, mirror_act))
+        return act
 
     reward_recorder = []
     episode_length_recorder = []
-    episode_rewards = np.zeros([eval_envs.num_envs, 2], dtype=np.float)
+    episode_rewards = np.zeros([eval_envs.num_envs, 1], dtype=np.float)
     total_steps = 0
     total_episodes = 0
     eval_envs.seed(seed)
@@ -236,9 +234,10 @@ def mirror_evaluate(trainer, mirror, eval_envs, frame_stack, num_episodes=10, se
     mirror_frame_stack_tensor.update(obs[1])
     while True:
         obs, reward, done, info, masks, total_episodes, total_steps, \
-        episode_rewards = step_envs(
-            get_action(frame_stack_tensor, mirror_frame_stack_tensor), eval_envs, episode_rewards,
-            frame_stack_tensor, reward_recorder, episode_length_recorder,
+        episode_rewards = mirror_step_envs(
+            get_action(frame_stack_tensor), get_action(mirror_frame_stack_tensor), eval_envs, episode_rewards,
+            frame_stack_tensor, mirror_frame_stack_tensor,
+            reward_recorder, episode_length_recorder,
             total_steps, total_episodes, trainer.device, frame_stack == 1)
         if total_episodes >= num_episodes:
             break

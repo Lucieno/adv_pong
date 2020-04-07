@@ -223,14 +223,6 @@ def train(args):
                         reward_recorder, episode_length_recorder, total_steps,
                         total_episodes, config.device, test)
 
-                    # print(np.sum(obs[0] - np.flip(obs[1], [3])))
-                    # print(np.sum(obs[0] - obs[1]))
-                    if test:
-                        frame_stack_masks = masks.view(-1, 1)
-                    else:
-                        frame_stack_masks = masks.view(-1, 1, 1, 1)
-                    mirror_frame_stack_tensor.update(obs[1], frame_stack_masks)
-
                     # print('reward', reward)
                     rewards = torch.from_numpy(reward[:,0].astype(np.float32)).view(-1, 1).to(config.device)
                     mirror_rewards = torch.from_numpy(reward[:,1].astype(np.float32)).view(-1, 1).to(config.device)
@@ -339,7 +331,6 @@ def train(args):
                 ),
                 iteration=iteration
             )
-
             if tournament:
                 stats["opponent"] = envs.current_agent_name
 
@@ -348,6 +339,15 @@ def train(args):
                 "===== {} Training Iteration {} =====".format(
                     algo, iteration): stats
             })
+
+            training_episode_reward=summary(reward_recorder, "episode_reward")
+            # print(training_episode_reward)
+
+            if training_episode_reward["episode_reward_mean"] > 3.0:
+                trainer.save_w(log_dir, "best{}".format(best_index))
+                mirror.load_w(log_dir, "best{}".format(best_index))
+                best_index += 1
+
 
         if iteration % config.save_freq == 0:
             trainer_path = trainer.save_w(log_dir, "iter{}".format(iteration))
