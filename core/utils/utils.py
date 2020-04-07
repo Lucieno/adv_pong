@@ -75,6 +75,49 @@ def step_envs(cpu_actions, envs, episode_rewards, frame_stack_tensor,
            episode_rewards
 
 
+def mirror_step_envs(cpu_actions, mirror_cpu_actions,
+        envs, episode_rewards, 
+        frame_stack_tensor, mirror_frame_stack_tensor,
+        reward_recorder, length_recorder, total_steps, total_episodes,
+        device, test):
+    """Step the vectorized environments for one step. Process the reward
+    recording and terminal states."""
+    obs, reward, done, info = envs.step(list(zip(cpu_actions, mirror_cpu_actions)))
+    # print('reward', reward)
+    episode_rewards += reward[:, 0].reshape(episode_rewards.shape)
+    episode_rewards_old_shape = episode_rewards.shape
+    if not np.isscalar(done[0]):
+        done = np.all(done, axis=1)
+    for idx, d in enumerate(done):
+        if d:  # the episode is done
+            # Record the reward of the terminated episode to
+            reward_recorder.append(episode_rewards[idx].copy())
+
+            # For CartPole-v0 environment, the length of episodes is not
+            # recorded.
+            if "num_steps" in info[idx]:
+                length_recorder.append(info[idx]["num_steps"])
+            total_episodes += 1
+    masks = 1. - done.astype(np.float32)
+
+    episode_rewards *= masks.reshape(-1, 1) # not sure
+
+    assert episode_rewards.shape == episode_rewards_old_shape
+
+    total_steps += obs[0].shape[0] if isinstance(obs, tuple) else obs.shape[0]
+    masks = torch.from_numpy(masks).to(device).view(-1, 1)
+    # frame_stack_tensor is refreshed in-place if done happen.
+    if test:
+        frame_stack_masks = masks.view(-1, 1)
+    else:
+        frame_stack_masks = masks.view(-1, 1, 1, 1)
+    # If in multiple pong mode, we suppose only the first observation is used to
+    # train agent.
+    frame_stack_tensor.update(obs[0] if isinstance(obs, tuple) else obs, frame_stack_masks)
+    mirror_frame_stack_tensor.update(obs[1], frame_stack_masks)
+    return obs, reward, done, info, masks, total_episodes, total_steps, episode_rewards
+
+
 def save_progress(log_dir, progress):
     path = os.path.join(log_dir, "progress.pkl")
     torch.save(progress, path)
@@ -150,6 +193,51 @@ def evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
         obs, reward, done, info, masks, total_episodes, total_steps, \
         episode_rewards = step_envs(
             get_action(frame_stack_tensor), eval_envs, episode_rewards,
+            frame_stack_tensor, reward_recorder, episode_length_recorder,
+            total_steps, total_episodes, trainer.device, frame_stack == 1)
+        if total_episodes >= num_episodes:
+            break
+    return reward_recorder, episode_length_recorder
+
+
+def mirror_evaluate(trainer, mirror, eval_envs, frame_stack, num_episodes=10, seed=0):
+    """This function evaluate the given policy and return the mean episode
+    reward.
+    :param policy: a function whose input is the observation
+    :param env: an environment instance
+    :param num_episodes: number of episodes you wish to run
+    :param seed: the random seed
+    :return: the averaged episode reward of the given policy.
+    """
+
+    frame_stack_tensor = FrameStackTensor( eval_envs.num_envs, eval_envs.observation_space[0].shape, frame_stack, trainer.device)
+    mirror_frame_stack_tensor = FrameStackTensor( eval_envs.num_envs, eval_envs.observation_space[0].shape, frame_stack, trainer.device)
+
+    def get_action(frame_stack_tensor, mirror_frame_stack_tensor):
+        obs = frame_stack_tensor.get()
+        mirror_obs = frame_stack_tensor.get()
+        if isinstance(obs, np.ndarray):
+            obs = torch.from_numpy(obs).to(trainer.device)
+        with torch.no_grad():
+            act = trainer.compute_action(obs, deterministic=True)[1]
+            mirror_act = mirror.compute_action(mirror_obs, deterministic=True)[1]
+        act = act.view(-1).cpu().numpy()
+        mirror_act = mirror_act.view(-1).cpu().numpy()
+        return list(zip(act, mirror_act))
+
+    reward_recorder = []
+    episode_length_recorder = []
+    episode_rewards = np.zeros([eval_envs.num_envs, 2], dtype=np.float)
+    total_steps = 0
+    total_episodes = 0
+    eval_envs.seed(seed)
+    obs = eval_envs.reset()
+    frame_stack_tensor.update(obs[0])
+    mirror_frame_stack_tensor.update(obs[1])
+    while True:
+        obs, reward, done, info, masks, total_episodes, total_steps, \
+        episode_rewards = step_envs(
+            get_action(frame_stack_tensor, mirror_frame_stack_tensor), eval_envs, episode_rewards,
             frame_stack_tensor, reward_recorder, episode_length_recorder,
             total_steps, total_episodes, trainer.device, frame_stack == 1)
         if total_episodes >= num_episodes:

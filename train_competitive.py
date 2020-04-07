@@ -21,7 +21,7 @@ from competitive_pong import make_envs
 from core.a2c_trainer import A2CTrainer, a2c_config
 from core.ppo_trainer import PPOTrainer, ppo_config
 from core.utils import verify_log_dir, pretty_print, Timer, evaluate, \
-    summary, save_progress, FrameStackTensor, step_envs
+    mirror_evaluate, summary, save_progress, FrameStackTensor, step_envs, mirror_step_envs
 
 gym.logger.set_level(40)
 
@@ -156,10 +156,14 @@ def train(args):
     # Create a placeholder tensor to help stack frames in 2nd dimension
     # That is turn the observation from shape [num_envs, 1, 84, 84] to
     # [num_envs, 4, 84, 84].
-    frame_stack_tensor = FrameStackTensor(
-        num_envs, envs.observation_space.shape, frame_stack, config.device)
+    if args.env_id == "CompetitivePongDouble-v0":
+        frame_stack_tensor = FrameStackTensor(num_envs, envs.observation_space[0].shape, frame_stack, config.device)
+        mirror_frame_stack_tensor = FrameStackTensor(num_envs, envs.observation_space[1].shape, frame_stack, config.device)
+    else:
+        frame_stack_tensor = FrameStackTensor(num_envs, envs.observation_space.shape, frame_stack, config.device)
 
     # Setup some stats helpers
+    # episode_rewards = np.zeros([num_envs, 2 if args.env_id == "CompetitivePongDouble-v0" else 1], dtype=np.float)
     episode_rewards = np.zeros([num_envs, 1], dtype=np.float)
     total_episodes = total_steps = iteration = 0
     reward_recorder = deque(maxlen=100)
@@ -173,47 +177,99 @@ def train(args):
 
     # Start training
     print("Start training!")
-    obs = envs.reset()
-    frame_stack_tensor.update(obs)
-    trainer.rollouts.observations[0].copy_(frame_stack_tensor.get())
+    if args.env_id == "CompetitivePongDouble-v0":
+        mirror = PPOTrainer(envs, config, frame_stack, _test=test)
+        if args.load_dir and args.load_suffix:
+            mirror.load_w(args.load_dir, args.load_suffix)
 
-    if args.agent:
+        obs = envs.reset()
+        frame_stack_tensor.update(obs[0])
+        trainer.rollouts.observations[0].copy_(frame_stack_tensor.get())
+
+        mirror_frame_stack_tensor.update(obs[1])
+        mirror.rollouts.observations[0].copy_(mirror_frame_stack_tensor.get())
+    else:
+        obs = envs.reset()
+        frame_stack_tensor.update(obs)
+        trainer.rollouts.observations[0].copy_(frame_stack_tensor.get())
+
+    if args.agent and args.env_id != "CompetitivePongDouble-v0":
         envs.reset_opponent(agent_name=args.agent)
+
+    best_index = 1
 
     while True:  # Break when total_steps exceeds maximum value
         # ===== Sample Data =====
         with sample_timer:
             for index in range(config.num_steps):
-                # Get action
-                # [TODO] Get the action
-                # Hint:
-                #   1. Remember to disable gradient computing
-                #   2. trainer.rollouts is a storage containing all data
-                #   3. What observation is needed for trainer.compute_action?
-                with torch.no_grad():
-                    values, actions, action_log_prob = \
-                            trainer.compute_action(trainer.rollouts.observations[index])
-                # values = trainer.compute_values()
-                # actions = trainer.compute_action()
-                # action_log_prob = None
+                if args.env_id == "CompetitivePongDouble-v0":
+                    # print(torch.sum(trainer.rollouts.observations - torch.flip(mirror.rollouts.observations, [4])))
+                    # print(torch.sum(trainer.rollouts.observations - mirror.rollouts.observations))
+                    # print(torch.sum(trainer.rollouts.observations - trainer.rollouts.observations))
+                    with torch.no_grad():
+                        values, actions, action_log_prob = trainer.compute_action(trainer.rollouts.observations[index])
+                        mirror_values, mirror_actions, mirror_action_log_prob = mirror.compute_action(mirror.rollouts.observations[index])
+                        # mirror_values, mirror_actions, mirror_action_log_prob = trainer.compute_action(trainer.rollouts.observations[index])
 
-                cpu_actions = actions.view(-1).cpu().numpy()
+                    cpu_actions = actions.view(-1).cpu().numpy()
+                    mirror_cpu_actions = mirror_actions.view(-1).cpu().numpy()
 
-                # Step the environment
-                # (Check step_envs function, you need to implement it)
-                obs, reward, done, info, masks, total_episodes, \
-                total_steps, episode_rewards = step_envs(
-                    cpu_actions, envs, episode_rewards, frame_stack_tensor,
-                    reward_recorder, episode_length_recorder, total_steps,
-                    total_episodes, config.device, test)
+                    # print('action', list(zip(cpu_actions, mirror_cpu_actions)))
+                    # Step the environment
+                    # (Check step_envs function, you need to implement it)
+                    obs, reward, done, info, masks, total_episodes, \
+                    total_steps, episode_rewards = mirror_step_envs(
+                        cpu_actions, mirror_cpu_actions, envs, episode_rewards, frame_stack_tensor, mirror_frame_stack_tensor,
+                        reward_recorder, episode_length_recorder, total_steps,
+                        total_episodes, config.device, test)
 
-                rewards = torch.from_numpy(
-                    reward.astype(np.float32)).view(-1, 1).to(config.device)
+                    # print(np.sum(obs[0] - np.flip(obs[1], [3])))
+                    # print(np.sum(obs[0] - obs[1]))
+                    if test:
+                        frame_stack_masks = masks.view(-1, 1)
+                    else:
+                        frame_stack_masks = masks.view(-1, 1, 1, 1)
+                    mirror_frame_stack_tensor.update(obs[1], frame_stack_masks)
 
-                # Store samples
-                trainer.rollouts.insert(
-                    frame_stack_tensor.get(), actions.view(-1, 1),
-                    action_log_prob, values, rewards, masks)
+                    # print('reward', reward)
+                    rewards = torch.from_numpy(reward[:,0].astype(np.float32)).view(-1, 1).to(config.device)
+                    mirror_rewards = torch.from_numpy(reward[:,1].astype(np.float32)).view(-1, 1).to(config.device)
+
+                    # Store samples
+                    trainer.rollouts.insert( frame_stack_tensor.get(), actions.view(-1, 1), action_log_prob, values, rewards, masks)
+                    mirror.rollouts.insert( mirror_frame_stack_tensor.get(), mirror_actions.view(-1, 1), mirror_action_log_prob, mirror_values, mirror_rewards, masks)
+                else:
+                    # Get action
+                    # [TODO] Get the action
+                    # Hint:
+                    #   1. Remember to disable gradient computing
+                    #   2. trainer.rollouts is a storage containing all data
+                    #   3. What observation is needed for trainer.compute_action?
+                    print('trainer.rollouts.observations[index]', trainer.rollouts.observations[index].shape)
+                    with torch.no_grad():
+                        values, actions, action_log_prob = \
+                                trainer.compute_action(trainer.rollouts.observations[index])
+                    # values = trainer.compute_values()
+                    # actions = trainer.compute_action()
+                    # action_log_prob = None
+
+                    cpu_actions = actions.view(-1).cpu().numpy()
+
+                    # Step the environment
+                    # (Check step_envs function, you need to implement it)
+                    obs, reward, done, info, masks, total_episodes, \
+                    total_steps, episode_rewards = step_envs(
+                        cpu_actions, envs, episode_rewards, frame_stack_tensor,
+                        reward_recorder, episode_length_recorder, total_steps,
+                        total_episodes, config.device, test)
+
+                    rewards = torch.from_numpy(
+                        reward.astype(np.float32)).view(-1, 1).to(config.device)
+
+                    # Store samples
+                    trainer.rollouts.insert(
+                        frame_stack_tensor.get(), actions.view(-1, 1),
+                        action_log_prob, values, rewards, masks)
 
         # ===== Process Samples =====
         with process_timer:
@@ -227,6 +283,8 @@ def train(args):
             policy_loss, value_loss, dist_entropy, total_loss = \
                 trainer.update(trainer.rollouts)
             trainer.rollouts.after_update()
+            if args.env_id == "CompetitivePongDouble-v0":
+                mirror.rollouts.after_update()
 
         # ===== Reset opponent if in tournament mode =====
         # if tournament and iteration % config.num_steps == 0:
@@ -237,15 +295,17 @@ def train(args):
         # ===== Evaluate Current Policy =====
         if iteration % config.eval_freq == 0:
             eval_timer = Timer()
-            evaluate_rewards, evaluate_lengths = evaluate(
-                trainer, eval_envs, frame_stack, 20)
+            if args.env_id == "CompetitivePongDouble-v0":
+                evaluate_rewards, evaluate_lengths = mirror_evaluate( trainer, mirror, eval_envs, frame_stack, 20)
+            else:
+                evaluate_rewards, evaluate_lengths = evaluate( trainer, eval_envs, frame_stack, 20)
             evaluate_stat = summary(evaluate_rewards, "episode_reward")
             if evaluate_lengths:
                 evaluate_stat.update(
                     summary(evaluate_lengths, "episode_length"))
             evaluate_stat.update(dict(
                 win_rate=float(
-                    sum(np.array(evaluate_rewards) >= 0) / len(
+                    sum(np.array(evaluate_rewards)[0,:] >= 0) / len(
                         evaluate_rewards)),
                 evaluate_time=eval_timer.now,
                 evaluate_iteration=iteration
