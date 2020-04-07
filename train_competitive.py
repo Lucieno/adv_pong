@@ -229,7 +229,8 @@ def train(args):
             trainer.rollouts.after_update()
 
         # ===== Reset opponent if in tournament mode =====
-        if tournament and not args.agent and iteration % config.num_steps == 0:
+        # if tournament and iteration % config.num_steps == 0:
+        if tournament:
             # Randomly choose one agent in each iteration
             envs.reset_opponent()
 
