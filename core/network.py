@@ -16,7 +16,7 @@ import torch.nn.functional as F
 class ActorCritic(nn.Module):
     def __init__(self, input_shape, num_actions):
         super(ActorCritic, self).__init__()
-        num_actions = 3
+        # num_actions = 3
         init_ = lambda m: self.layer_init(m, nn.init.orthogonal_,
                                           lambda x: nn.init.constant_(x, 0),
                                           nn.init.calculate_gain('relu'))

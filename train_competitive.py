@@ -103,8 +103,7 @@ def train(args):
     else:
         raise ValueError("args.algo must in [PPO, A2C]")
     config.num_envs = args.num_envs
-    assert args.env_id in ["CompetitivePong-v0", "CartPole-v0",
-                           "CompetitivePongTournament-v0", "CompetitivePongDouble-v0"]
+    # assert args.env_id in ["CompetitivePong-v0", "CartPole-v0", "CompetitivePongTournament-v0", "CompetitivePongDouble-v0"]
 
     # Seed the environments and setup torch
     seed = args.seed
@@ -237,7 +236,7 @@ def train(args):
                     #   1. Remember to disable gradient computing
                     #   2. trainer.rollouts is a storage containing all data
                     #   3. What observation is needed for trainer.compute_action?
-                    print('trainer.rollouts.observations[index]', trainer.rollouts.observations[index].shape)
+                    # print('trainer.rollouts.observations[index]', trainer.rollouts.observations[index].shape)
                     with torch.no_grad():
                         values, actions, action_log_prob = \
                                 trainer.compute_action(trainer.rollouts.observations[index])

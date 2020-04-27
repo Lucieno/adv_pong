@@ -250,8 +250,6 @@ def adversial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0)
     obs = eval_envs.reset()
     frame_stack_tensor.update(obs)
 
-    print(dir(eval_envs))
-
     while True:
         obs, reward, done, info, masks, total_episodes, total_steps, \
         episode_rewards = step_envs(
