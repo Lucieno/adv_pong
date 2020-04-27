@@ -5,7 +5,7 @@ import numpy as np
 from core.ppo_trainer import PPOTrainer, ppo_config
 from competitive_pong import make_envs
 from core.utils import verify_log_dir, pretty_print, Timer, evaluate, \
-    summary, save_progress, FrameStackTensor, step_envs
+    adversial_evaluate, summary, save_progress, FrameStackTensor, step_envs
 
 def attack():
     config = ppo_config
@@ -14,14 +14,15 @@ def attack():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
     torch.set_num_threads(1)
-    env_id = "Pong-v0"
+    # env_id = "Pong-v0"
+    env_id = "CompetitivePong-v0"
     load_dir = "./data/mirror/PPO"
     load_suffix = "best4"
     log_dir = "./data/attack"
     iteration = 0
     num_envs = 1
     test = False
-    tournament = env_id == "CompetitivePongTournament-v0"
+    tournament = False
 
     eval_envs = make_envs(
         env_id=env_id,
@@ -42,7 +43,7 @@ def attack():
         num_envs, eval_envs.observation_space.shape, frame_stack, config.device)
 
     eval_timer = Timer()
-    evaluate_rewards, evaluate_lengths = evaluate(
+    evaluate_rewards, evaluate_lengths = adversial_evaluate(
         trainer, eval_envs, frame_stack, 20)
     evaluate_stat = summary(evaluate_rewards, "episode_reward")
     if evaluate_lengths:

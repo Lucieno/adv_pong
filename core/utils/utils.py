@@ -11,11 +11,14 @@ original writers.
 of Information Engineering, The Chinese University of Hong Kong. Course
 Instructor: Professor ZHOU Bolei. Assignment author: PENG Zhenghao.
 """
+from __future__ import print_function
+
 import copy
 import glob
 import json
 import os
 import time
+import sys
 from collections import deque
 
 import matplotlib
@@ -26,6 +29,11 @@ import torch
 import yaml
 from scipy.signal import medfilt
 
+from numpy import copy
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 def step_envs(cpu_actions, envs, episode_rewards, frame_stack_tensor,
               reward_recorder, length_recorder, total_steps, total_episodes,
@@ -215,6 +223,13 @@ def adversial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0)
         trainer.device
     )
 
+    def mapping_action(arr):
+        d = {0: 2, 1: 0, 2: 3}
+        res_arr = copy(arr)
+        for k, v in d.items(): 
+            res_arr[arr==k] = v
+        return res_arr
+
     def get_action(frame_stack_tensor):
         obs = frame_stack_tensor.get()
         if isinstance(obs, np.ndarray):
@@ -222,6 +237,8 @@ def adversial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0)
         with torch.no_grad():
             act = trainer.compute_action(obs, deterministic=True)[1]
         act = act.view(-1).cpu().numpy()
+        if trainer.num_actions == 6:
+            return mapping_action(act)
         return act
 
     reward_recorder = []
@@ -232,6 +249,9 @@ def adversial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0)
     eval_envs.seed(seed)
     obs = eval_envs.reset()
     frame_stack_tensor.update(obs)
+
+    print(dir(eval_envs))
+
     while True:
         obs, reward, done, info, masks, total_episodes, total_steps, \
         episode_rewards = step_envs(
