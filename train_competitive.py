@@ -343,7 +343,7 @@ def train(args):
             training_episode_reward=summary(reward_recorder, "episode_reward")
             # print(training_episode_reward)
 
-            if training_episode_reward["episode_reward_mean"] > 3.0:
+            if args.env_id == "CompetitivePongDouble-v0" and training_episode_reward["episode_reward_mean"] > 5.0:
                 trainer.save_w(log_dir, "best{}".format(best_index))
                 mirror.load_w(log_dir, "best{}".format(best_index))
                 best_index += 1
@@ -357,8 +357,8 @@ def train(args):
             ))
 
         # [TODO] Stop training when total_steps is greater than args.max_steps
-        if total_steps > args.max_steps:
-            break
+        # if total_steps > args.max_steps:
+        #     break
 
         iteration += 1
 
