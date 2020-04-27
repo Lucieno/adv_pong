@@ -200,6 +200,49 @@ def evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
     return reward_recorder, episode_length_recorder
 
 
+def adversial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
+    """This function evaluate the given policy and return the mean episode
+    reward.
+    :param policy: a function whose input is the observation
+    :param env: an environment instance
+    :param num_episodes: number of episodes you wish to run
+    :param seed: the random seed
+    :return: the averaged episode reward of the given policy.
+    """
+
+    frame_stack_tensor = FrameStackTensor(
+        eval_envs.num_envs, eval_envs.observation_space.shape, frame_stack,
+        trainer.device
+    )
+
+    def get_action(frame_stack_tensor):
+        obs = frame_stack_tensor.get()
+        if isinstance(obs, np.ndarray):
+            obs = torch.from_numpy(obs).to(trainer.device)
+        with torch.no_grad():
+            act = trainer.compute_action(obs, deterministic=True)[1]
+        act = act.view(-1).cpu().numpy()
+        return act
+
+    reward_recorder = []
+    episode_length_recorder = []
+    episode_rewards = np.zeros([eval_envs.num_envs, 1], dtype=np.float)
+    total_steps = 0
+    total_episodes = 0
+    eval_envs.seed(seed)
+    obs = eval_envs.reset()
+    frame_stack_tensor.update(obs)
+    while True:
+        obs, reward, done, info, masks, total_episodes, total_steps, \
+        episode_rewards = step_envs(
+            get_action(frame_stack_tensor), eval_envs, episode_rewards,
+            frame_stack_tensor, reward_recorder, episode_length_recorder,
+            total_steps, total_episodes, trainer.device, frame_stack == 1)
+        if total_episodes >= num_episodes:
+            break
+    return reward_recorder, episode_length_recorder
+
+
 def mirror_evaluate(trainer, mirror, eval_envs, frame_stack, num_episodes=10, seed=0):
     """This function evaluate the given policy and return the mean episode
     reward.
