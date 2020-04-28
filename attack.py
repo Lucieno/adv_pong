@@ -5,7 +5,7 @@ import numpy as np
 from core.ppo_trainer import PPOTrainer, ppo_config
 from competitive_pong import make_envs
 from core.utils import verify_log_dir, pretty_print, Timer, evaluate, \
-    adversial_evaluate, summary, save_progress, FrameStackTensor, step_envs
+    adversarial_evaluate, summary, save_progress, FrameStackTensor, step_envs
 
 def attack():
     config = ppo_config
@@ -43,7 +43,7 @@ def attack():
         num_envs, eval_envs.observation_space.shape, frame_stack, config.device)
 
     eval_timer = Timer()
-    evaluate_rewards, evaluate_lengths = adversial_evaluate(
+    evaluate_rewards, evaluate_lengths = adversarial_evaluate(
         trainer, eval_envs, frame_stack, 20)
     evaluate_stat = summary(evaluate_rewards, "episode_reward")
     if evaluate_lengths:

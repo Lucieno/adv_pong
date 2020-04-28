@@ -208,16 +208,7 @@ def evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
     return reward_recorder, episode_length_recorder
 
 
-def adversial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
-    """This function evaluate the given policy and return the mean episode
-    reward.
-    :param policy: a function whose input is the observation
-    :param env: an environment instance
-    :param num_episodes: number of episodes you wish to run
-    :param seed: the random seed
-    :return: the averaged episode reward of the given policy.
-    """
-
+def adversarial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
     frame_stack_tensor = FrameStackTensor(
         eval_envs.num_envs, eval_envs.observation_space.shape, frame_stack,
         trainer.device
