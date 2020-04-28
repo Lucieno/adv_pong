@@ -208,7 +208,8 @@ def evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
     return reward_recorder, episode_length_recorder
 
 
-def adversarial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
+def adversarial_evaluate(trainer, eval_envs, frame_stack, 
+        num_episodes=10, seed=0, is_render=False, is_attack=True):
     frame_stack_tensor = FrameStackTensor(
         eval_envs.num_envs, eval_envs.observation_space.shape, frame_stack,
         trainer.device
@@ -247,7 +248,9 @@ def adversarial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=
 
     def get_action(frame_stack_tensor):
         obs = frame_stack_tensor.get()
-        obs = produce_perturbed_obs(obs)
+        if is_attack:
+            print("perturbing")
+            obs = produce_perturbed_obs(obs)
         if isinstance(obs, np.ndarray):
             obs = torch.from_numpy(obs).to(trainer.device)
         with torch.no_grad():
@@ -272,6 +275,8 @@ def adversarial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=
             get_action(frame_stack_tensor), eval_envs, episode_rewards,
             frame_stack_tensor, reward_recorder, episode_length_recorder,
             total_steps, total_episodes, trainer.device, frame_stack == 1)
+        if is_render:
+            eval_envs.render()
         if total_episodes >= num_episodes:
             break
     return reward_recorder, episode_length_recorder

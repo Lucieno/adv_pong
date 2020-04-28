@@ -1,4 +1,5 @@
 import os
+import argparse
 import torch
 import numpy as np
 
@@ -7,7 +8,7 @@ from competitive_pong import make_envs
 from core.utils import verify_log_dir, pretty_print, Timer, evaluate, \
     adversarial_evaluate, summary, save_progress, FrameStackTensor, step_envs
 
-def attack():
+def attack(is_attack=True, is_render=False):
     config = ppo_config
     seed = 100 # args.seed
     torch.manual_seed(seed)
@@ -44,7 +45,7 @@ def attack():
 
     eval_timer = Timer()
     evaluate_rewards, evaluate_lengths = adversarial_evaluate(
-        trainer, eval_envs, frame_stack, 20)
+        trainer, eval_envs, frame_stack, 20, is_render=is_render, is_attack=is_attack)
     evaluate_stat = summary(evaluate_rewards, "episode_reward")
     if evaluate_lengths:
         evaluate_stat.update(
@@ -60,4 +61,16 @@ def attack():
     print(evaluate_stat)
 
 if __name__ == "__main__":
-    attack()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--render",
+        default=False,
+        type=bool,
+    )
+    parser.add_argument(
+        "--no-attack",
+        default=False,
+        type=bool,
+    )
+    args = parser.parse_args()
+    attack(is_attack=(not args.no_attack), is_render=args.render)
