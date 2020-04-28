@@ -18,6 +18,9 @@ import numpy as np
 import torch
 from competitive_pong import make_envs
 
+import torch.optim as optim
+from torch import nn
+
 from core.a2c_trainer import A2CTrainer, a2c_config
 from core.ppo_trainer import PPOTrainer, ppo_config
 from core.utils import verify_log_dir, pretty_print, Timer, evaluate, \
@@ -270,7 +273,7 @@ def train(args):
             trainer.rollouts.compute_returns(next_value, config.GAMMA)
 
         # ===== Update Policy =====
-        def update_uni(this_trainer, this_rollouts):
+        def update_uni(this_trainer, this_rollout):
             num_sgd_steps = 10
             mini_batch_size = 500
             uni_perturb_pth = "./data/uni_perturb.pt"
@@ -278,9 +281,14 @@ def train(args):
             try:
                 uni_perturb = torch.load(uni_perturb_pth)
             except:
-                uni_perturb = torch.zeros(trainer.num_feats)
+                uni_perturb = torch.zeros(this_trainer.num_feats)
 
-            optimizer = optim.Adam(uni_perturb, lr=self.lr, eps=1e-5)
+            uni_perturb = uni_perturb.cuda()
+            perturb_delta = nn.Parameter(torch.zeros(this_trainer.num_feats).cuda())
+            perturb_delta.requires_grad = True
+
+            optimizer = optim.Adam(nn.ParameterList([perturb_delta]), lr=5e-2, eps=1e-5)
+            sm = nn.Softmax(dim=1)
 
             advantages = this_rollout.returns[:-1] - this_rollout.value_preds[:-1]
             advantages = (advantages - advantages.mean()) / (
@@ -289,18 +297,28 @@ def train(args):
                 data_generator = this_rollout.feed_forward_generator(
                     advantages, mini_batch_size)
 
+                loss_epoch = []
                 for sample in data_generator:
-                    logits, _ = trainer.model(obs + uni_perturb)
+                    observations_batch, actions_batch, return_batch, masks_batch, \
+                    old_action_log_probs_batch, adv_targ = sample
+                    logits, _ = this_trainer.model(observations_batch + uni_perturb + perturb_delta)
                     target_prob = torch.zeros_like(logits)
                     target_prob[0] = 1
-                    loss = torch.pow(target_prob - torch.exp(logits), 2).mean() + torch.pow(uni_perturb, 2).mean()
+                    # loss = torch.pow(target_prob - torch.exp(logits), 2).mean() + torch.pow(perturb_delta, 2).mean()
+                    loss = torch.pow(target_prob - sm(logits), 2).mean() + torch.pow(perturb_delta, 2).mean()
 
-                    self.optimizer.zero_grad()
+                    # print('loss:', loss)
+                    loss_epoch.append(loss.item())
+                    optimizer.zero_grad()
                     loss.backward()
                     # torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_norm_max)
-                    self.optimizer.step()
+                    optimizer.step()
 
-            troch.save(uni_perturb, uni_perturb_pth)
+            uni_perturb += perturb_delta
+            norm = torch.pow(uni_perturb, 2).mean()
+            delta_norm = torch.pow(perturb_delta, 2).mean()
+            print('norm, delta_norm, np.mean(loss_epoch):', norm, delta_norm, np.mean(loss_epoch))
+            torch.save(uni_perturb.cpu(), uni_perturb_pth)
 
         with update_timer:
             # policy_loss, value_loss, dist_entropy, total_loss = trainer.update(trainer.rollouts)
@@ -308,6 +326,9 @@ def train(args):
             trainer.rollouts.after_update()
             if args.env_id == "CompetitivePongDouble-v0":
                 mirror.rollouts.after_update()
+
+        iteration += 1
+        continue
 
         # ===== Reset opponent if in tournament mode =====
         # if tournament and iteration % config.num_steps == 0:
