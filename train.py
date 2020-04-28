@@ -195,9 +195,41 @@ def train(args):
             trainer.rollouts.compute_returns(next_value, config.GAMMA)
 
         # ===== Update Policy =====
+        def update_uni(this_trainer, this_rollouts):
+            num_sgd_steps = 10
+            mini_batch_size = 500
+            uni_perturb_pth = "./data/uni_perturb.pt"
+
+            try:
+                uni_perturb = torch.load(uni_perturb_pth)
+            except:
+                uni_perturb = torch.zeros(trainer.num_feats)
+
+            optimizer = optim.Adam(uni_perturb, lr=self.lr, eps=1e-5)
+
+            advantages = this_rollout.returns[:-1] - this_rollout.value_preds[:-1]
+            advantages = (advantages - advantages.mean()) / (
+                    advantages.std() + 1e-5)
+            for e in range(num_sgd_steps):
+                data_generator = this_rollout.feed_forward_generator(
+                    advantages, mini_batch_size)
+
+                for sample in data_generator:
+                    logits, _ = trainer.model(obs + uni_perturb)
+                    target_prob = torch.zeros_like(logits)
+                    target_prob[0] = 1
+                    loss = torch.pow(target_prob - torch.exp(logits), 2).mean() + torch.pow(uni_perturb, 2).mean()
+
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    # torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_norm_max)
+                    self.optimizer.step()
+
+            troch.save(uni_perturb, uni_perturb_pth)
+
         with update_timer:
-            policy_loss, value_loss, dist_entropy, total_loss = \
-                trainer.update(trainer.rollouts)
+            # policy_loss, value_loss, dist_entropy, total_loss = trainer.update(trainer.rollouts)
+            update_uni(trainer, trainer.rollouts)
             trainer.rollouts.after_update()
 
         # ===== Reset opponent if in tournament mode =====

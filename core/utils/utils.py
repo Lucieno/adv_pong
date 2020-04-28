@@ -209,7 +209,8 @@ def evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
 
 
 def adversarial_evaluate(trainer, eval_envs, frame_stack, 
-        num_episodes=10, seed=0, is_render=False, is_attack=True):
+        num_episodes=10, seed=0, is_render=False, is_attack=True,
+        uni_perturb=None):
     print("is_render", is_render)
     print("is_attack", is_attack)
     frame_stack_tensor = FrameStackTensor(
