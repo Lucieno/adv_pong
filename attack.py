@@ -8,7 +8,7 @@ from competitive_pong import make_envs
 from core.utils import verify_log_dir, pretty_print, Timer, evaluate, \
     adversarial_evaluate, summary, save_progress, FrameStackTensor, step_envs
 
-def attack(is_attack=True, is_render=False):
+def attack(is_attack=True, is_render=False, is_uni=True):
     config = ppo_config
     seed = 100 # args.seed
     torch.manual_seed(seed)
@@ -20,7 +20,6 @@ def attack(is_attack=True, is_render=False):
     load_dir = "./data/mirror/PPO"
     load_suffix = "best4"
     log_dir = "./data/attack"
-    uni_perturb_pth = "./data/uni_perturb.pt"
     iteration = 0
     num_envs = 1
     test = False
@@ -41,18 +40,13 @@ def attack(is_attack=True, is_render=False):
     #file_path = os.path.join(load_dir, "checkpoint-%s.pkl"%load_suffix)
     trainer.load_w(load_dir, load_suffix)
 
-    try:
-        uni_perturb = torch.load(uni_perturb_pth)
-    except:
-        uni_perturb = torch.zeros(trainer.num_feats)
-
     frame_stack_tensor = FrameStackTensor(
         num_envs, eval_envs.observation_space.shape, frame_stack, config.device)
 
     eval_timer = Timer()
-    evaluate_rewards, evaluate_lengths, uni_perturb = adversarial_evaluate(
+    evaluate_rewards, evaluate_lengths = adversarial_evaluate(
         trainer, eval_envs, frame_stack, 20, is_render=is_render, is_attack=is_attack,
-        uni_perturb=uni_perturb)
+        is_uni_perturb=is_uni)
     evaluate_stat = summary(evaluate_rewards, "episode_reward")
     if evaluate_lengths:
         evaluate_stat.update(
@@ -64,8 +58,6 @@ def attack(is_attack=True, is_render=False):
         evaluate_time=eval_timer.now,
         evaluate_iteration=iteration
     ))
-
-    troch.save(uni_perturb, uni_perturb_pth)
 
     print(evaluate_stat)
 
@@ -81,6 +73,10 @@ if __name__ == "__main__":
         default=False,
         type=bool,
     )
+    parser.add_argument(
+        "--no-uni",
+        default=False,
+        type=bool,
+    )
     args = parser.parse_args()
-    print("args.is_attack", args.is_attack)
-    attack(is_attack=(not args.no_attack), is_render=args.render)
+    attack(is_attack=(not args.no_attack), is_uni=(not args.no_uni), is_render=args.render)

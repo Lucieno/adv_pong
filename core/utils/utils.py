@@ -210,13 +210,18 @@ def evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=0):
 
 def adversarial_evaluate(trainer, eval_envs, frame_stack, 
         num_episodes=10, seed=0, is_render=False, is_attack=True,
-        uni_perturb=None):
+        uni_perturb=None, is_uni_perturb=False):
     print("is_render", is_render)
     print("is_attack", is_attack)
+    print("is_uni_perturb", is_uni_perturb)
     frame_stack_tensor = FrameStackTensor(
         eval_envs.num_envs, eval_envs.observation_space.shape, frame_stack,
         trainer.device
     )
+
+    if is_uni_perturb:
+        uni_perturb_pth = "./data/uni_perturb.pt"
+        uni_perturb = torch.load(uni_perturb_pth).to(trainer.device)
 
     def produce_perturbed_obs(obs):
         obs.requires_grad = True
@@ -253,7 +258,10 @@ def adversarial_evaluate(trainer, eval_envs, frame_stack,
         obs = frame_stack_tensor.get()
         if is_attack:
             # obs = produce_perturbed_obs(obs)
-            pertrubed_obs = produce_perturbed_obs(obs)
+            if is_uni_perturb:
+                pertrubed_obs = obs + uni_perturb
+            else:
+                pertrubed_obs = produce_perturbed_obs(obs)
             obs.data.copy_(pertrubed_obs.data)
         if isinstance(obs, np.ndarray):
             obs = torch.from_numpy(obs).to(trainer.device)
