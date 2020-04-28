@@ -214,6 +214,30 @@ def adversarial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=
         trainer.device
     )
 
+    def produce_perturbed_obs(obs):
+        obs.requires_grad = True
+        logits, _ = trainer.model(obs)
+        target_prob = torch.zeros_like(logits)
+        target_prob[0] = 1
+        loss = torch.pow(target_prob - torch.exp(logits), 2).mean()
+        # ratio = torch.exp(target_log_prob - logits)
+        # loss = ratio
+
+        trainer.model.zero_grad()
+        loss.backward()
+
+        # fgsm
+        epsilon = 5
+        # alterable_masks = torch.zeros_like(obs)
+        # alterable_masks[240:] = 1
+        obs_grad = obs.grad.data
+        sign_grad = obs_grad.sign()
+        # perturbed_obs = obs - epsilon * sign_grad * alterable_masks
+        perturbed_obs = obs - epsilon * sign_grad
+
+        obs.requires_grad = False
+        return perturbed_obs
+
     def mapping_action(arr):
         d = {0: 2, 1: 0, 2: 3}
         res_arr = copy(arr)
@@ -223,6 +247,7 @@ def adversarial_evaluate(trainer, eval_envs, frame_stack, num_episodes=10, seed=
 
     def get_action(frame_stack_tensor):
         obs = frame_stack_tensor.get()
+        obs = produce_perturbed_obs(obs)
         if isinstance(obs, np.ndarray):
             obs = torch.from_numpy(obs).to(trainer.device)
         with torch.no_grad():
