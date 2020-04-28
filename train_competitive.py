@@ -276,6 +276,7 @@ def train(args):
         def update_uni(this_trainer, this_rollout):
             num_sgd_steps = 10
             mini_batch_size = 500
+            uni_step = 10
             uni_perturb_pth = "./data/uni_perturb.pt"
 
             try:
@@ -287,7 +288,7 @@ def train(args):
             perturb_delta = nn.Parameter(torch.zeros(this_trainer.num_feats).cuda())
             perturb_delta.requires_grad = True
 
-            optimizer = optim.Adam(nn.ParameterList([perturb_delta]), lr=5e-2, eps=1e-5)
+            optimizer = optim.Adam(nn.ParameterList([perturb_delta]), lr=5e-3, eps=1e-5)
             sm = nn.Softmax(dim=1)
 
             advantages = this_rollout.returns[:-1] - this_rollout.value_preds[:-1]
@@ -301,23 +302,25 @@ def train(args):
                 for sample in data_generator:
                     observations_batch, actions_batch, return_batch, masks_batch, \
                     old_action_log_probs_batch, adv_targ = sample
-                    logits, _ = this_trainer.model(observations_batch + uni_perturb + perturb_delta)
-                    target_prob = torch.zeros_like(logits)
-                    target_prob[0] = 1
-                    # loss = torch.pow(target_prob - torch.exp(logits), 2).mean() + torch.pow(perturb_delta, 2).mean()
-                    loss = torch.pow(target_prob - sm(logits), 2).mean() + torch.pow(perturb_delta, 2).mean()
+                    perturb_delta.value = torch.zeros_like(perturb_delta)
+                    for uni_stepping in range(uni_step):
+                        logits, _ = this_trainer.model(observations_batch + uni_perturb + perturb_delta)
+                        target_prob = torch.zeros_like(logits)
+                        target_prob[0] = 1
+                        # loss = torch.pow(target_prob - torch.exp(logits), 2).mean() + torch.pow(perturb_delta, 2).mean()
+                        loss = torch.pow(target_prob - sm(logits), 2).mean() + torch.pow(perturb_delta, 2).mean()
 
-                    # print('loss:', loss)
-                    loss_epoch.append(loss.item())
-                    optimizer.zero_grad()
-                    loss.backward()
-                    # torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_norm_max)
-                    optimizer.step()
+                        # print('loss:', loss)
+                        loss_epoch.append(loss.item())
+                        optimizer.zero_grad()
+                        loss.backward()
+                        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_norm_max)
+                        optimizer.step()
+                    uni_perturb += perturb_delta 
 
-            uni_perturb += perturb_delta
             norm = torch.pow(uni_perturb, 2).mean()
             delta_norm = torch.pow(perturb_delta, 2).mean()
-            print('norm, delta_norm, np.mean(loss_epoch):', norm, delta_norm, np.mean(loss_epoch))
+            print('norm, delta_norm, np.mean(loss_epoch):', norm.item(), delta_norm.item(), np.mean(loss_epoch))
             torch.save(uni_perturb.cpu(), uni_perturb_pth)
 
         with update_timer:
