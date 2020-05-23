@@ -45,7 +45,7 @@ def attack(is_attack=True, is_render=False, is_uni=True):
 
     eval_timer = Timer()
     evaluate_rewards, evaluate_lengths = adversarial_evaluate(
-        trainer, eval_envs, frame_stack, 20, is_render=is_render, is_attack=is_attack,
+        trainer, eval_envs, frame_stack, 5, is_render=is_render, is_attack=is_attack,
         is_uni_perturb=is_uni)
     evaluate_stat = summary(evaluate_rewards, "episode_reward")
     if evaluate_lengths:

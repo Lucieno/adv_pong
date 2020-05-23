@@ -281,6 +281,7 @@ def adversarial_evaluate(trainer, eval_envs, frame_stack,
     obs = eval_envs.reset()
     frame_stack_tensor.update(obs)
 
+    all_frames = []
     while True:
         obs, reward, done, info, masks, total_episodes, total_steps, \
         episode_rewards = step_envs(
@@ -288,9 +289,14 @@ def adversarial_evaluate(trainer, eval_envs, frame_stack,
             frame_stack_tensor, reward_recorder, episode_length_recorder,
             total_steps, total_episodes, trainer.device, frame_stack == 1)
         if is_render:
-            eval_envs.render()
+            rendering_frame = eval_envs.render("rgb_array")
+            all_frames.append(rendering_frame)
         if total_episodes >= num_episodes:
             break
+    if is_render:
+        import pickle
+        with open('attack-%s-uni-%s.data'%(is_attack, is_uni_perturb), 'wb') as f:
+            pickle.dump(all_frames, f)
     return reward_recorder, episode_length_recorder
 
 
